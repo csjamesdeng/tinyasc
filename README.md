@@ -1,1 +1,1 @@
-# tinyasc
+# tinyascA tiny android system core providing adbd function, seperated from android-4.4.4_r2.0.1.
