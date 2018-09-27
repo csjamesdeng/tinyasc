@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include "sysdeps.h"
 
@@ -259,6 +260,46 @@ static void usb_adb_init()
     }
 }
 
+static void set_udc(void)
+{
+	static char g_udc_controller[64];
+	const char *udc_config_path = "/sys/kernel/config/usb_gadget/g1/UDC";
+	int fd;
+
+	if (strlen(g_udc_controller) <= 0) {
+		const char *udc_path = "/sys/class/udc";
+		DIR *dir;
+		struct dirent *ent;
+		dir = opendir(udc_path);
+		if (!dir) {
+			D("[%s: opendir %s failed]\n", __func__, udc_path);
+			return;
+		}
+		while((ent = readdir(dir)) != NULL) {
+			if (ent->d_type & DT_REG) {
+				if (!strcmp(".", ent->d_name))
+					continue;
+				else if (!strcmp("..", ent->d_name))
+					continue;
+				else
+					break;
+			}
+		}
+		D("%s: get udc controller: %s \n", __func__, ent->d_name);
+		strncpy(g_udc_controller, ent->d_name, sizeof(g_udc_controller));
+		closedir(dir);
+	}
+
+	fd = adb_open(udc_config_path, O_RDWR);
+	if (fd<0) {
+		D("[%s: open %s failed]\n", __func__, udc_config_path);
+		return;
+	}
+	adb_write(fd, g_udc_controller, strlen(g_udc_controller)+1);
+
+	adb_close(fd);
+	return;
+}
 
 static void init_functionfs(struct usb_handle *h)
 {
@@ -294,6 +335,12 @@ static void init_functionfs(struct usb_handle *h)
         D("[ %s: cannot open bulk-in ep: errno=%d ]\n", USB_FFS_ADB_IN, errno);
         goto err;
     }
+
+    /*
+     * In FFS mode, udc name must be set after initializaion
+     * So add this function.
+     * */
+    set_udc();
 
     return;
 
